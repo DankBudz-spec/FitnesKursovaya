@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: my_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      # Мы заменили pgdata на путь к папке.
+      # Теперь данные базы будут лежать в папке db_data прямо в твоем проекте.
+      - ./db_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: my_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "8080:80"
+    volumes:
+      # А это сохранит твои "сервера" и "пароли" внутри самого pgAdmin,
+      # чтобы не вводить их заново каждый раз.
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+
+volumes:
+  # Нам больше не нужно прописывать pgdata здесь, так как мы используем папку ./db_data
+  pgadmin_data:
