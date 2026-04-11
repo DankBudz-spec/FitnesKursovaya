@@ -10,25 +10,21 @@ class DBManager:
         return psycopg2.connect(**self.params)
 
     def execute_query(self, query, params=None, fetch=False):
-        """
-        Универсальный метод для выполнения SQL.
-        fetch=True — если нужно вернуть данные (SELECT).
-        fetch=False — если нужно просто выполнить (INSERT/DELETE).
-        """
         conn = None
-        result = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cursor:
                 cursor.execute(query, params)
                 if fetch:
                     result = cursor.fetchall()
-                    colnames = [desc[0] for desc in cursor.description]
-                    return result, colnames
+                    return result, "Успешно"
+
                 conn.commit()
+                return True, "Операция выполнена успешно"
         except Exception as e:
-            print(f"Database Error: {e}")
             if conn: conn.rollback()
+            # Возвращаем False и сам текст ошибки из базы данных
+            error_msg = str(e).split('\n')[0]  # Берем только первую строку ошибки
+            return False, error_msg
         finally:
             if conn: conn.close()
-        return result
