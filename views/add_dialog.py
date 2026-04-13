@@ -87,7 +87,7 @@ class AddDialog(QDialog):
 
         # 2. ДАТЫ И ВРЕМЯ
         # Проверяем все возможные упоминания дат из твоего main_window
-        date_keywords = ["дата", "регистрация", "куплено", "принят", "начало", "конец", "вход", "выход", "время", "то"]
+        date_keywords = ["дата", "регистрация", "куплено", "принят", "начало", "конец", "вход", "выход", "время", "последнее"]
         if any(x in l for x in date_keywords):
             w = QDateEdit()
             w.setCalendarPopup(True)
@@ -105,7 +105,7 @@ class AddDialog(QDialog):
             return w
 
         # Целые числа (Integer)
-        if any(x in l for x in ["вместимость", "срок", "уровень", "дни"]):
+        if any(x in l for x in ["вместимость", "срок", "уровень", "дни",]):
             w = QSpinBox()
             w.setRange(0, 10000)
             return w
@@ -117,9 +117,9 @@ class AddDialog(QDialog):
             return w
 
         # 5. СТАТУСЫ И БОКИРОВКИ (ComboBox)
-        if any(x in l for x in ["заблокирован", "статус"]):
+        if any(x in l for x in ["блокировка", "статус"]):
             w = QComboBox()
-            if "заблок" in l:
+            if "блок" in l:
                 # Для базы данных (0 - нет, 1 - да)
                 w.addItem("Разблокирован (0)", 0)
                 w.addItem("Заблокирован (1)", 1)
@@ -138,7 +138,6 @@ class AddDialog(QDialog):
         return w
 
     def _create_foreign_key_combo(self, target_table):
-        """Теперь используем уже готовый контроллер"""
         items = self.controller.get_lookup_data(target_table)
 
         combo = QComboBox()
@@ -147,16 +146,11 @@ class AddDialog(QDialog):
         return combo
 
     def get_data(self):
-        """Собирает данные (теперь учитывает ID из ComboBox)"""
         data = []
         for widget in self.inputs.values():
             if isinstance(widget, QComboBox):
-                # Если в ComboBox есть привязанный ID, берем его
                 val = widget.currentData()
-                if val is not None:
-                    data.append(val)
-                else:
-                    data.append(widget.currentText())
+                data.append(val if val is not None else widget.currentText())
             elif isinstance(widget, QDateEdit):
                 data.append(widget.date().toString("yyyy-MM-dd"))
             elif isinstance(widget, (QDoubleSpinBox, QSpinBox)):
@@ -168,24 +162,30 @@ class AddDialog(QDialog):
         return data
 
     def fill_data(self, data):
-        """Заполняет поля (учитывает поиск по ID для ComboBox)"""
         for i, (label, widget) in enumerate(self.inputs.items()):
             val = data[i + 1]
             if val is None: continue
 
             if isinstance(widget, QComboBox):
-                # Ищем элемент, у которого userData совпадает с ID из базы
                 index = widget.findData(val)
-                if index >= 0:
-                    widget.setCurrentIndex(index)
-                else:
-                    # Если не нашли по ID, ищем по тексту (для обычных списков)
-                    index = widget.findText(str(val))
-                    if index >= 0: widget.setCurrentIndex(index)
+                if index < 0: index = widget.findText(str(val))
+                if index >= 0: widget.setCurrentIndex(index)
             elif isinstance(widget, QDateEdit):
-                widget.setDate(QDate.fromString(str(val), "yyyy-MM-dd"))
+                # Безопасное приведение к дате
+                d = QDate.fromString(str(val), "yyyy-MM-dd")
+                if d.isValid(): widget.setDate(d)
             elif isinstance(widget, (QDoubleSpinBox, QSpinBox)):
-                widget.setValue(float(val))
+                try:
+                    # Если это целое число (SpinBox)
+                    if isinstance(widget, QSpinBox):
+                        # Сначала в float (на случай если в БД строка "30.0"),
+                        # а потом в int для виджета
+                        widget.setValue(int(float(val)))
+                    else:
+                        # Если это DoubleSpinBox
+                        widget.setValue(float(val))
+                except:
+                    widget.setValue(0)
             elif isinstance(widget, QTextEdit):
                 widget.setPlainText(str(val))
             else:
