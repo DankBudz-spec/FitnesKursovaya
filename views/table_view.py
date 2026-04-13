@@ -66,7 +66,7 @@ class TableView(QWidget):
         self.controller.sync_table(self.table, self.table_name)
 
     def add_row(self):
-        dialog = AddDialog(self.table_name, self.russian_headers)
+        dialog = AddDialog(self.table_name, self.russian_headers, self.controller)
 
         while True:
             if dialog.exec():  # Если пользователь нажал "Сохранить"
@@ -138,7 +138,7 @@ class TableView(QWidget):
         record_id = current_values[0]  # ID всегда первый
 
         # 3. Открываем диалог, передавая в него текущие данные
-        dialog = AddDialog(self.table_name, self.russian_headers, current_data=current_values)
+        dialog = AddDialog(self.table_name, self.russian_headers, self.controller, current_data=current_values)
 
         while True:
             if dialog.exec():

@@ -28,6 +28,18 @@ class TableController:
                 item = QTableWidgetItem(text_value)
                 table_widget.setItem(row_number, column_number, item)
 
+    def get_lookup_data(self, table_name):
+        """Возвращает список (ID, Название) для выпадающих списков"""
+        from database.queries import SQLQueries
+        info = SQLQueries.TABLES.get(table_name)
+        if not info: return []
+
+        display_col = info.get("display_col", info["id"])
+        query = f"SELECT {info['id']}, {display_col} FROM {table_name} ORDER BY {display_col};"
+
+        result, _ = self.db.execute_query(query, fetch=True)
+        return result if result else []
+
     def add_record(self, table_name, row_data):
         query = SQLQueries.get_insert_query(table_name, len(row_data))
 

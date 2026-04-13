@@ -2,49 +2,49 @@ class SQLQueries:
     TABLES = {
         "membership_types": {
             "id": "type_id",
-            "cols": ["title", "price", "duration_days", "access_level"]
+            "cols": ["title", "price", "duration_days", "access_level"],
+            "display_col": "title"
         },
         "clients": {
             "id": "client_id",
             "cols": ["full_name", "phone_primary", "phone_secondary", "email", "birth_date", "address",
-                     "registration_date", "medical_notes", "photo_path"]
+                     "registration_date", "medical_notes", "photo_path"],
+            "display_col": "full_name"
         },
         "staff": {
             "id": "staff_id",
-            "cols": ["full_name", "position", "specialization", "salary_rate", "phone", "hire_date"]
+            "cols": ["full_name", "position", "specialization", "salary_rate", "phone", "hire_date"],
+            "display_col": "full_name"
         },
         "classes": {
             "id": "class_type_id",
-            "cols": ["name", "description"]
+            "cols": ["name", "description"],
+            "display_col": "name"
         },
         "zones": {
             "id": "zone_id",
-            "cols": ["name", "capacity", "required_access_level"]
+            "cols": ["name", "capacity", "required_access_level"],
+            "display_col": "name"
         },
         "equipment": {
             "id": "equipment_id",
-            "cols": ["zone_id", "name", "purchase_date", "last_service_date", "status"]
+            "cols": ["zone_id", "name", "purchase_date", "last_service_date", "status"],
+            "display_col": "name"
         },
         "client_subscriptions": {
             "id": "subscription_id",
-            "cols": ["client_id", "type_id", "start_date", "end_date", "remaining_freeze_days", "is_blocked"]
+            "cols": ["client_id", "type_id", "start_date", "end_date", "remaining_freeze_days", "is_blocked"],
+            "display_col": "subscription_id"  # Для связи обычно используют ID или дату
         },
         "schedule": {
             "id": "schedule_id",
-            "cols": ["class_type_id", "coach_id", "zone_id", "start_time", "end_time"]
+            "cols": ["class_type_id", "coach_id", "zone_id", "start_time", "end_time"],
+            "display_col": "start_time"  # В расписании лучше показывать время
         },
-        "class_registrations": {
-            "id": "registration_id",
-            "cols": ["schedule_id", "client_id", "registration_time", "status"]
-        },
-        "attendance_log": {
-            "id": "visit_id",
-            "cols": ["client_id", "entry_dt", "exit_dt"]
-        },
-        "payments": {
-            "id": "payment_id",
-            "cols": ["client_id", "amount", "payment_date", "payment_method"]
-        }
+        "class_registrations": {"id": "registration_id",
+                                "cols": ["schedule_id", "client_id", "registration_time", "status"]},
+        "attendance_log": {"id": "visit_id", "cols": ["client_id", "entry_dt", "exit_dt"]},
+        "payments": {"id": "payment_id", "cols": ["client_id", "amount", "payment_date", "payment_method"]}
     }
 
     @staticmethod
