@@ -138,11 +138,16 @@ class AddDialog(QDialog):
         return w
 
     def _create_foreign_key_combo(self, target_table):
+        # Получаем данные из контроллера (ID, Красивое имя)
         items = self.controller.get_lookup_data(target_table)
 
         combo = QComboBox()
-        for item_id, item_name in items:
-            combo.addItem(str(item_name), item_id)
+        # Добавляем пустую строку, чтобы не выбирался первый попавшийся случайно
+        combo.addItem("— Выберите —", None)
+
+        for item_id, item_display_name in items:
+            # item_display_name уже содержит "ФИО | Телефон" из контроллера
+            combo.addItem(str(item_display_name), item_id)
         return combo
 
     def get_data(self):
@@ -163,30 +168,55 @@ class AddDialog(QDialog):
 
     def fill_data(self, data):
         for i, (label, widget) in enumerate(self.inputs.items()):
+            # Берем данные из таблицы, пропуская ID (индекс i+1)
             val = data[i + 1]
-            if val is None: continue
+            if val is None:
+                val = ""
+
+            # Приводим к строке и очищаем от лишних пробелов
+            val_str = str(val).strip()
 
             if isinstance(widget, QComboBox):
+                # Поиск по ID (Data) или по тексту
                 index = widget.findData(val)
-                if index < 0: index = widget.findText(str(val))
-                if index >= 0: widget.setCurrentIndex(index)
+                if index < 0:
+                    # Умный поиск по началу строки (для ФИО | Телефон)
+                    search_text = val_str
+                    for idx in range(widget.count()):
+                        if widget.itemText(idx).startswith(search_text):
+                            index = idx
+                            break
+                if index >= 0:
+                    widget.setCurrentIndex(index)
+
             elif isinstance(widget, QDateEdit):
-                # Безопасное приведение к дате
-                d = QDate.fromString(str(val), "yyyy-MM-dd")
-                if d.isValid(): widget.setDate(d)
+                d = QDate.fromString(val_str, "yyyy-MM-dd")
+                if not d.isValid():
+                    # Пробуем формат из таблицы (если там другой)
+                    d = QDate.fromString(val_str, "dd.MM.yyyy")
+                if d.isValid():
+                    widget.setDate(d)
+
             elif isinstance(widget, (QDoubleSpinBox, QSpinBox)):
                 try:
-                    # Если это целое число (SpinBox)
-                    if isinstance(widget, QSpinBox):
-                        # Сначала в float (на случай если в БД строка "30.0"),
-                        # а потом в int для виджета
-                        widget.setValue(int(float(val)))
+                    # Очищаем строку от возможного мусора (валюта, пробелы, запятые)
+                    # "30 дней" -> "30", "1 500,50" -> "1500.50"
+                    clean_val = val_str.replace(',', '.').replace(' ', '')
+                    # Оставляем только цифры, точки и минус
+                    clean_val = "".join(c for c in clean_val if c.isdigit() or c in ".-")
+
+                    if not clean_val:
+                        widget.setValue(0)
                     else:
-                        # Если это DoubleSpinBox
-                        widget.setValue(float(val))
-                except:
+                        num_val = float(clean_val)
+                        if isinstance(widget, QSpinBox):
+                            widget.setValue(int(num_val))
+                        else:
+                            widget.setValue(num_val)
+                except (ValueError, TypeError):
                     widget.setValue(0)
+
             elif isinstance(widget, QTextEdit):
-                widget.setPlainText(str(val))
+                widget.setPlainText(val_str)
             else:
-                widget.setText(str(val))
+                widget.setText(val_str)

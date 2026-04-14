@@ -29,16 +29,30 @@ class TableController:
                 table_widget.setItem(row_number, column_number, item)
 
     def get_lookup_data(self, table_name):
-        """Возвращает список (ID, Название) для выпадающих списков"""
-        from database.queries import SQLQueries
+        """Возвращает (ID, Название) для ComboBox. Для клиентов добавляет телефон."""
         info = SQLQueries.TABLES.get(table_name)
         if not info: return []
 
         display_col = info.get("display_col", info["id"])
-        query = f"SELECT {info['id']}, {display_col} FROM {table_name} ORDER BY {display_col};"
 
-        result, _ = self.db.execute_query(query, fetch=True)
-        return result if result else []
+        # Специфическая логика для вывода клиентов: ФИО | Телефон
+        if table_name == "clients":
+            query = f"SELECT client_id, (full_name || ' | ' || phone_primary) FROM clients ORDER BY full_name;"
+        elif table_name == "staff":
+            query = f"SELECT staff_id, (full_name || ' | ' || position) FROM staff ORDER BY full_name;"
+        elif table_name == "schedule":
+            # Для выбора записи в расписании показываем занятие + время
+            query = """
+                SELECT sch.schedule_id, (cl.name || ' | ' || sch.start_time) 
+                FROM schedule sch 
+                JOIN classes cl ON sch.class_type_id = cl.class_type_id 
+                ORDER BY sch.start_time;
+            """
+        else:
+            query = f"SELECT {info['id']}, {display_col} FROM {table_name} ORDER BY {display_col};"
+
+        response = self.db.execute_query(query, fetch=True)
+        return response[0] if response else []
 
     def add_record(self, table_name, row_data):
         query = SQLQueries.get_insert_query(table_name, len(row_data))
