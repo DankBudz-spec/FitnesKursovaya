@@ -12,6 +12,7 @@ services:
       # Мы заменили pgdata на путь к папке.
       # Теперь данные базы будут лежать в папке db_data прямо в твоем проекте.
       - ./db_data:/var/lib/postgresql/data
+      - ./init_db:/docker-entrypoint-initdb.d
 
   pgadmin:
     image: dpage/pgadmin4:latest

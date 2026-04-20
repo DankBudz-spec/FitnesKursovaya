@@ -1,79 +1,71 @@
 import sys
-from PyQt6.QtWidgets import QMainWindow, QTabWidget, QApplication
+from PyQt6.QtWidgets import QMainWindow, QTabWidget, QApplication, QDialog
 from qt_material import apply_stylesheet
 from views.table_view import TableView
+from views.login_window import LoginWindow
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user_role, user_name):
         super().__init__()
-        self.setWindowTitle("Fintes — Система управления")
+        # Сохраняем данные пользователя
+        self.user_role = user_role
+        self.user_name = user_name
+
+        self.setWindowTitle(f"Fintes — {self.user_name} ({self.user_role})")
         self.resize(1500, 800)
 
-        # Создаем виджет вкладок
         self.tabs = QTabWidget()
-        # Разрешаем перетаскивание вкладок для удобства (опционально)
         self.tabs.setMovable(True)
         self.setCentralWidget(self.tabs)
 
-        # Добавляем все 11 таблиц
+        # 1. Сначала инициализируем все возможные вкладки
         self.init_all_tabs()
 
-    def init_all_tabs(self):
-        tables_config = {
-            "membership_types": [
-                ["ID", "Название", "Стоимость", "Срок действия", "Уровень доступа"], "💳 Типы абонементов"
-            ],
-            "clients": [
-                ["ID", "ФИО", "телефон", "Доп. телефон", "Email", "Дата рожд.", "Адрес", "Регистрация", "Ограничения",
-                 "Фото"], "👥 Клиенты"
-            ],
-            "staff": [
-                ["ID", "ФИО", "Должность", "Специализация", "Ставка", "Телефон", "Принят"], "👔 Персонал"
-            ],
-            "classes": [
-                ["ID", "Название", "Описание"], "🏃 Виды занятий"
-            ],
-            "zones": [
-                ["ID", "Название", "Вместимость", "Уровень"], "📍 Зоны"
-            ],
-            "equipment": [
-                ["ID", "Зона", "Название", "Куплено", "Последнее ТО", "Статус"], "⚙️ Оборудование"
-            ],
-            "client_subscriptions": [
-                ["ID", "Клиент", "Тип абонемента", "Начало", "Конец", "дни заморозки", "блокировка"], "📜 Активные абонементы"
-            ],
-            "schedule": [
-                ["ID", "Занятие", "Тренер", "Зона", "Начало", "Конец"], "📅 Расписание"
-            ],
-            "class_registrations": [
-                ["ID", "Запись", "Клиент", "Время записи", "Статус"], "📝 Записи"
-            ],
-            "attendance_log": [
-                ["ID", "Клиент", "Вход", "Выход"], "🚪 Посещения"
-            ],
-            "payments": [
-                ["ID", "Клиент", "Сумма", "Дата", "Метод"], "💰 Платежи"
-            ]
+        # 2. Затем скрываем лишние согласно роли
+        self.apply_permissions()
+
+    def apply_permissions(self):
+        """
+        Оставляет только те вкладки, которые разрешены данной роли.
+        """
+        permissions = {
+            "Администратор": None,
+            "Менеджер": ["👥 Клиенты", "💳 Типы абонементов", "📜 Активные абонементы", "🚪 Посещения", "💰 Платежи"],
+            "Тренер": ["📅 Расписание", "📝 Записи", "⚙️ Оборудование", "🏃 Виды занятий"],
+            "Клиент": ["📅 Расписание", "📝 Записи"]
         }
 
-        # Циклом создаем все вкладки
+        allowed_tabs = permissions.get(self.user_role)
+
+        # Если роль не Администратор (у него None, т.е. разрешено всё)
+        if allowed_tabs is not None:
+            # Проходим по вкладкам с конца, чтобы индексы не сбивались при удалении
+            for i in range(self.tabs.count() - 1, -1, -1):
+                tab_text = self.tabs.tabText(i)
+                if tab_text not in allowed_tabs:
+                    self.tabs.removeTab(i)
+
+    def init_all_tabs(self):
+        # Конфигурация остается как у тебя, только добавим заголовки в нужном порядке
+        tables_config = {
+            "membership_types": [["ID", "Название", "Стоимость", "Срок", "Доступ"], "💳 Типы абонементов"],
+            "clients": [
+                ["ID", "ФИО", "Телефон", "Доп. тел.", "Email", "Дата рожд.", "Адрес", "Регистрация", "Заметки", "Фото",
+                 "Логин", "Пароль"], "👥 Клиенты"],
+            "staff": [["ID", "ФИО", "Должность", "Специализация", "Ставка", "Телефон", "Принят", "Логин", "Пароль"],
+                      "👔 Персонал"],
+            "classes": [["ID", "Название", "Описание"], "🏃 Виды занятий"],
+            "zones": [["ID", "Название", "Вместимость", "Уровень"], "📍 Зоны"],
+            "equipment": [["ID", "Зона", "Название", "Куплено", "Последнее ТО", "Состояние"], "⚙️ Оборудование"],
+            "client_subscriptions": [["ID", "Клиент", "Тип абонемента", "Начало", "Конец", "Заморозка", "Блокировка"],
+                                     "📜 Активные абонементы"],
+            "schedule": [["ID", "Занятие", "Тренер", "Зона", "Начало", "Конец"], "📅 Расписание"],
+            "class_registrations": [["ID", "Запись", "Клиент", "Время", "Статус"], "📝 Записи"],
+            "attendance_log": [["ID", "Клиент", "Вход", "Выход"], "🚪 Посещения"],
+            "payments": [["ID", "Клиент", "Сумма", "Дата", "Метод"], "💰 Платежи"]
+        }
+
         for table_db_name, info in tables_config.items():
-            headers = info[0]
-            tab_label = info[1]
-
-            # Создаем экземпляр нашей универсальной таблицы
-            tab_widget = TableView(table_db_name, headers)
-            self.tabs.addTab(tab_widget, tab_label)
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-
-    # Применяем современную темную тему
-    # 'dark_teal.xml' или 'dark_amber.xml' выглядят очень солидно
-    apply_stylesheet(app, theme='dark_blue.xml')
-
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+            tab_widget = TableView(table_db_name, info[0], role=self.user_role)
+            self.tabs.addTab(tab_widget, info[1])

@@ -2,6 +2,8 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                              QPushButton, QHBoxLayout, QLabel, QDateEdit,
                              QDoubleSpinBox, QSpinBox, QTextEdit, QComboBox)
 from PyQt6.QtCore import Qt, QDate
+from datetime import timedelta
+from PyQt6.QtWidgets import QMessageBox
 
 
 class AddDialog(QDialog):
@@ -83,7 +85,11 @@ class AddDialog(QDialog):
         # Сначала проверяем, не является ли поле выпадающим списком из другой таблицы
         for key, target_table in relations.items():
             if key in l:
-                return self._create_foreign_key_combo(target_table)
+                combo = self._create_foreign_key_combo(target_table)
+                # НОВОЕ: Если это выбор типа абонемента, вешаем "слушателя"
+                if target_table == "membership_types":
+                    combo.currentIndexChanged.connect(self._on_membership_type_changed)
+                return combo
 
         # 2. ДАТЫ И ВРЕМЯ
         # Проверяем все возможные упоминания дат из твоего main_window
@@ -93,6 +99,18 @@ class AddDialog(QDialog):
             w.setCalendarPopup(True)
             w.setDate(QDate.currentDate())
             w.setDisplayFormat("yyyy-MM-dd")
+
+            if "начало" in l:
+                w.dateChanged.connect(self._on_membership_type_changed)
+
+                # Поле "конец" лучше сделать только для чтения, чтобы менеджер его не менял руками
+            if "конец" in l:
+                w.setReadOnly(True)
+                w.setStyleSheet("background-color: #f0f0f0; color: #555;")
+
+            if "регистрация" in l or "принят" in l:
+                if not self.is_edit:
+                    w.setEnabled(False)
             return w
 
         # 3. ЧИСЛА И ДЕНЬГИ
@@ -105,7 +123,7 @@ class AddDialog(QDialog):
             return w
 
         # Целые числа (Integer)
-        if any(x in l for x in ["вместимость", "срок", "уровень", "дни",]):
+        if any(x in l for x in ["вместимость", "срок", "уровень", "дни", "заморозка"]):
             w = QSpinBox()
             w.setRange(0, 10000)
             return w
@@ -117,18 +135,34 @@ class AddDialog(QDialog):
             return w
 
         # 5. СТАТУСЫ И БОКИРОВКИ (ComboBox)
-        if any(x in l for x in ["блокировка", "статус"]):
+        if any(x in l for x in ["блокировка", "статус", "состояние", "метод"]):
             w = QComboBox()
             if "блок" in l:
                 # Для базы данных (0 - нет, 1 - да)
                 w.addItem("Разблокирован (0)", 0)
                 w.addItem("Заблокирован (1)", 1)
-            else:
+            if "стат" in l:
+                w.addItems(["Записан", "Отменено", "Выполнено"])
+            if "сост" in l:
                 # Обычные текстовые статусы
-                w.addItems(["Записан", "Отменено", "Выполнено", "Исправно", "В ремонте"])
+                w.addItems(["Исправно", "В ремонте"])
+            if "мет" in l:
+                w.addItems(["Наличные", "Карта", "QR-код"])
             return w
 
-        # 6. ОБЫЧНАЯ СТРОКА (ФИО, Телефон, Email)
+            # 6. ЛОГИН И ПАРОЛЬ
+        if "пароль" in l:
+            w = QLineEdit()
+            w.setEchoMode(QLineEdit.EchoMode.Password)  # Скрывает символы
+            w.setPlaceholderText("Введите пароль")
+            return w
+
+        if "логин" in l:
+            w = QLineEdit()
+            w.setPlaceholderText("Придумайте логин")
+            return w
+
+        # 7. ОБЫЧНАЯ СТРОКА (ФИО, Телефон, Email)
         w = QLineEdit()
         if "телефон" in l:
             w.setPlaceholderText("+7 (999) 000-00-00")
@@ -220,3 +254,25 @@ class AddDialog(QDialog):
                 widget.setPlainText(val_str)
             else:
                 widget.setText(val_str)
+
+    def _get_widget_by_label(self, keyword):
+        """Вспомогательный метод для поиска полей по ключевому слову"""
+        for label, widget in self.inputs.items():
+            if keyword in label.lower():
+                return widget
+        return None
+
+    def _on_membership_type_changed(self):
+        """ТОЛЬКО автоматический расчет даты окончания (без всплывающих окон)"""
+        combo_type = self._get_widget_by_label("тип")
+        date_start = self._get_widget_by_label("начало")
+        date_end = self._get_widget_by_label("конец")
+
+        if not all([combo_type, date_start, date_end]) or not combo_type.currentData():
+            return
+
+        info = self.controller.get_membership_data(combo_type.currentData())
+        if info:
+            start_date = date_start.date().toPyDate()
+            end_date = start_date + timedelta(days=info['days'])
+            date_end.setDate(QDate(end_date.year, end_date.month, end_date.day))
