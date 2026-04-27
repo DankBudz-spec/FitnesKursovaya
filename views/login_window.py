@@ -32,7 +32,7 @@ class LoginWindow(QDialog):
 
         # Поле Логин
         self.login_input = QLineEdit()
-        self.login_input.setPlaceholderText("Логин (Телефон)")
+        self.login_input.setPlaceholderText("Логин")
         self.login_input.setMinimumHeight(45)
         self.login_input.setStyleSheet("padding-left: 10px;")
         layout.addWidget(self.login_input)
@@ -77,20 +77,20 @@ class LoginWindow(QDialog):
             QMessageBox.warning(self, "Ошибка", "Заполните все поля!")
             return
 
-        #hashed_pw = self._hash_password(password)
-
-        # Проверяем последовательно: сначала сотрудников, потом клиентов
         for user_type in ["staff", "clients"]:
-            query = SQLQueries.get_auth_query(user_type) # Используем метод из queries.py
+            query = SQLQueries.get_auth_query(user_type)
             response = self.db.execute_query(query, params=(login,), fetch=True)
 
             if response and response[0]:
                 user_data = response[0][0]
-                db_full_name = user_data[0]
-                db_role = user_data[1] # Для клиентов вернет 'Клиент'
-                db_hash = user_data[2]
+
+                db_id = user_data[0]
+                db_full_name = user_data[1]
+                db_role = user_data[2]
+                db_hash = user_data[3]
 
                 if password == db_hash:
+                    self.user_id = db_id
                     self.user_role = db_role
                     self.user_name = db_full_name
                     self.login_success.emit(db_role, db_full_name)

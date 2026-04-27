@@ -8,10 +8,12 @@ from PyQt6.QtCore import QDate
 
 
 class TableView(QWidget):
-    def __init__(self, table_name, russian_headers, role="Администратор"):
+    def __init__(self, table_name, russian_headers, role="Администратор", user_name=""):
         super().__init__()
         self.table_name = table_name
         self.russian_headers = russian_headers
+        self.role = role
+        self.user_name = user_name
         self.controller = TableController()
         self.init_ui()
         self.refresh_data()
@@ -22,10 +24,10 @@ class TableView(QWidget):
             self.btn_delete.hide()
             self.btn_edit.hide()
         elif role == "Тренер":
-            # Тренеру можно редактировать, но нельзя удалять/добавлять во многих таблицах
-            if table_name in ["staff", "payments", "membership_types"]:
-                self.btn_add.hide()
-                self.btn_delete.hide()
+            # Тренеру запрещаем стандартное редактирование таблиц
+            self.btn_add.hide()
+            self.btn_delete.hide()
+            self.btn_edit.hide()
         elif role == "Менеджер":
             # Менеджеру нельзя редактировать справочники (Зоны, Типы абонементов)
             # Это задача Администрации [cite: 40]
@@ -81,6 +83,25 @@ class TableView(QWidget):
 
         self.btn_freeze = QPushButton("❄️ Заморозить")
 
+        # КНОПКИ ДЛЯ ТРЕНЕРА
+        self.btn_mark_attended = QPushButton("✅ Отметить посещение")
+        self.btn_mark_attended.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold;")
+        self.btn_mark_attended.clicked.connect(self.trainer_mark_attended)
+
+        self.btn_break_eq = QPushButton("🔧 Отправить в ремонт")
+        self.btn_break_eq.setStyleSheet("background-color: #e67e22; color: white; font-weight: bold;")
+        self.btn_break_eq.clicked.connect(self.trainer_break_equipment)
+
+        # Прячем их, если это не тренер или не та таблица
+        if self.role != "Тренер" or self.table_name != "class_registrations":
+            self.btn_mark_attended.hide()
+        if self.role != "Тренер" or self.table_name != "equipment":
+            self.btn_break_eq.hide()
+
+        # Добавляем их в layout (вместе с твоими btn_add, btn_edit и т.д.)
+        btn_layout.addWidget(self.btn_mark_attended)
+        btn_layout.addWidget(self.btn_break_eq)
+
         # Показываем только в абонементах
         if self.table_name != "client_subscriptions":
             self.btn_price.hide()
@@ -105,11 +126,41 @@ class TableView(QWidget):
 
     def refresh_data(self, show_msg=False):
         try:
-            self.controller.sync_table(self.table, self.table_name)
+            # ПЕРЕДАЕМ ИМЯ и РОЛЬ!
+            self.controller.sync_table(self.table, self.table_name, self.role, self.user_name)
+
+            # Для менеджера/админа запускаем автозадачи
+            if self.role in ["Администратор", "Менеджер"]:
+                self.controller.run_auto_tasks()
+
             if show_msg:
                 QMessageBox.information(self, "Успех", "Данные успешно обновлены")
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось обновить данные: {str(e)}")
+
+    def trainer_mark_attended(self):
+        selected = self.table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Внимание", "Сначала выберите запись клиента!")
+            return
+
+        reg_id = self.table.item(selected[0].row(), 0).text()
+        success, msg = self.controller.mark_client_attended(reg_id)
+        if success:
+            QMessageBox.information(self, "Успех", "Клиент отмечен как 'Посетил'!")
+            self.refresh_data()
+
+    def trainer_break_equipment(self):
+        selected = self.table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Внимание", "Сначала выберите оборудование!")
+            return
+
+        eq_id = self.table.item(selected[0].row(), 0).text()
+        success, msg = self.controller.set_equipment_broken(eq_id)
+        if success:
+            QMessageBox.information(self, "Успех", "Статус оборудования изменен на 'В ремонте'.")
+            self.refresh_data()
 
 
     def add_row(self):

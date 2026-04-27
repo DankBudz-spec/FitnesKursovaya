@@ -22,9 +22,10 @@ class MainController:
             # Если в login_window.py вызвана self.accept(), извлекаем данные
             user_role = getattr(login_dialog, 'user_role', "Администратор")
             user_name = getattr(login_dialog, 'user_name', "Пользователь")
+            user_id = getattr(login_dialog, 'user_id', None)
 
             # Инициализируем главное окно, передавая роль и имя
-            self.main_window = MainWindow(user_role, user_name)
+            self.main_window = MainWindow(user_role, user_name, user_id)
             self.main_window.show()
 
             return True  # Сигнал для main.py запустить цикл событий

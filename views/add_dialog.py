@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                              QPushButton, QHBoxLayout, QLabel, QDateEdit,
+                             QDateTimeEdit,
                              QDoubleSpinBox, QSpinBox, QTextEdit, QComboBox)
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QDateTime
 from datetime import timedelta
 from PyQt6.QtWidgets import QMessageBox
 
@@ -72,45 +73,68 @@ class AddDialog(QDialog):
         l = label.lower()
 
         # 1. СЛОВАРЬ СВЯЗЕЙ (Foreign Keys)
-        # Мы ищем ключевое слово в заголовке и сопоставляем его с таблицей в БД
+        # Ищем ключевое слово в заголовке и сопоставляем его с таблицей в БД
         relations = {
             "клиент": "clients",  # Для "ID Клиента"
-            "тип абонемента": "membership_types",  # Для "ID типа абонемента"
+            "тип абонемента": "membership_types",
             "тренер": "staff",  # Для "ID Тренера"
             "занятие": "classes",  # Для "ID Занятия"
             "зона": "zones",  # Для "ID Зоны"
-            "запись": "schedule"  # Для "ID Записи" (ссылка на расписание)
+            "запись": "schedule"  # Для "ID Записи"
         }
 
-        # Сначала проверяем, не является ли поле выпадающим списком из другой таблицы
+        # Проверяем, является ли поле выпадающим списком (FK)
         for key, target_table in relations.items():
             if key in l:
                 combo = self._create_foreign_key_combo(target_table)
-                # НОВОЕ: Если это выбор типа абонемента, вешаем "слушателя"
+                # Если это выбор типа абонемента, вешаем "слушателя" для пересчета даты/цены
                 if target_table == "membership_types":
                     combo.currentIndexChanged.connect(self._on_membership_type_changed)
                 return combo
 
         # 2. ДАТЫ И ВРЕМЯ
-        # Проверяем все возможные упоминания дат из твоего main_window
-        date_keywords = ["дата", "регистрация", "куплено", "принят", "начало", "конец", "вход", "выход", "время", "последнее"]
+        date_keywords = ["дата", "регистрация", "куплено", "принят", "начало",
+                         "конец", "вход", "выход", "время", "последнее"]
+
         if any(x in l for x in date_keywords):
-            w = QDateEdit()
-            w.setCalendarPopup(True)
-            w.setDate(QDate.currentDate())
-            w.setDisplayFormat("yyyy-MM-dd")
+            needs_time = self.table_name in ["schedule", "class_registrations", "attendance_log", "payments"]
 
-            if "начало" in l:
-                w.dateChanged.connect(self._on_membership_type_changed)
+            if needs_time:
+                w = QDateTimeEdit()
+                w.setCalendarPopup(True)
+                w.setDisplayFormat("yyyy-MM-dd HH:mm:00")
 
-                # Поле "конец" лучше сделать только для чтения, чтобы менеджер его не менял руками
-            if "конец" in l:
-                w.setReadOnly(True)
-                w.setStyleSheet("background-color: #f0f0f0; color: #555;")
+                if "выход" in l:
+                    if not self.is_edit:
+                        # РЕЖИМ ДОБАВЛЕНИЯ: Намертво блокируем поле выхода
+                        null_dt = QDateTime(2000, 1, 1, 0, 0, 0)
+                        w.setMinimumDateTime(null_dt)
+                        w.setDateTime(null_dt)
+                        w.setSpecialValueText("— Ещё в зале —")
+                        w.setEnabled(False)  # <--- Выключаем виджет полностью
+                    else:
+                        # РЕЖИМ РЕДАКТИРОВАНИЯ: Разрешаем ввод (дата подставится в fill_data)
+                        w.calendarWidget().setSelectedDate(QDate.currentDate())
+                else:
+                    w.setDateTime(QDateTime.currentDateTime())
+            else:
+                w = QDateEdit()
+                w.setCalendarPopup(True)
+                w.setDate(QDate.currentDate())
+                w.setDisplayFormat("yyyy-MM-dd")
 
-            if "регистрация" in l or "принят" in l:
-                if not self.is_edit:
-                    w.setEnabled(False)
+            # Специфичная логика для таблицы абонементов клиентов
+            if self.table_name == "client_subscriptions":
+                if "начало" in l:
+                    w.dateChanged.connect(self._on_membership_type_changed)
+                if "конец" in l:
+                    w.setReadOnly(True)
+                    w.setStyleSheet("background-color: #f0f0f0; color: #555;")
+
+            # Блокировка даты регистрации/приема при создании новой записи
+            if ("регистрация" in l or "принят" in l) and not self.is_edit:
+                w.setEnabled(False)
+
             return w
 
         # 3. ЧИСЛА И ДЕНЬГИ
@@ -190,8 +214,16 @@ class AddDialog(QDialog):
             if isinstance(widget, QComboBox):
                 val = widget.currentData()
                 data.append(val if val is not None else widget.currentText())
+            # СНАЧАЛА ПРОВЕРЯЕМ QDateEdit
             elif isinstance(widget, QDateEdit):
                 data.append(widget.date().toString("yyyy-MM-dd"))
+            # ПОТОМ ПРОВЕРЯЕМ QDateTimeEdit
+            elif isinstance(widget, QDateTimeEdit):
+                # Если поле отключено (как наше "Время выхода" при добавлении)
+                if not widget.isEnabled() and widget.specialValueText():
+                    data.append(None)  # Отправляем NULL в базу
+                else:
+                    data.append(widget.dateTime().toString("yyyy-MM-dd HH:mm:00"))
             elif isinstance(widget, (QDoubleSpinBox, QSpinBox)):
                 data.append(widget.value())
             elif isinstance(widget, QTextEdit):
@@ -224,12 +256,31 @@ class AddDialog(QDialog):
                     widget.setCurrentIndex(index)
 
             elif isinstance(widget, QDateEdit):
-                d = QDate.fromString(val_str, "yyyy-MM-dd")
-                if not d.isValid():
-                    # Пробуем формат из таблицы (если там другой)
-                    d = QDate.fromString(val_str, "dd.MM.yyyy")
-                if d.isValid():
-                    widget.setDate(d)
+                # Если дата в базе пустая - ставим сегодняшнюю
+                if not val_str or val_str.lower() == "none":
+                    widget.setDate(QDate.currentDate())
+                else:
+                    d = QDate.fromString(val_str, "yyyy-MM-dd")
+                    if not d.isValid():
+                        # Пробуем формат из таблицы (если там другой)
+                        d = QDate.fromString(val_str, "dd.MM.yyyy")
+                    if d.isValid():
+                        widget.setDate(d)
+
+            elif isinstance(widget, QDateTimeEdit):
+                # Если в базе NULL или пусто
+                if not val_str or val_str.lower() == "none":
+                    if "выход" in label.lower() and self.is_edit:
+                        # УМНЫЙ UX: При редактировании пустого выхода сразу предлагаем "сейчас"
+                        widget.setDateTime(QDateTime.currentDateTime())
+                        widget.setSpecialValueText("")  # Убираем заглушку, показываем часы
+                else:
+                    dt = QDateTime.fromString(val_str, "yyyy-MM-dd HH:mm:ss")
+                    if not dt.isValid():
+                        dt = QDateTime.fromString(val_str.split('.')[0], "yyyy-MM-dd HH:mm:ss")
+                    if dt.isValid():
+                        widget.setDateTime(dt)
+                        widget.setSpecialValueText("")
 
             elif isinstance(widget, (QDoubleSpinBox, QSpinBox)):
                 try:

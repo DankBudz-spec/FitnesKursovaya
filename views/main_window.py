@@ -2,15 +2,19 @@ import sys
 from PyQt6.QtWidgets import QMainWindow, QTabWidget, QApplication, QDialog
 from qt_material import apply_stylesheet
 from views.table_view import TableView
-from views.login_window import LoginWindow
+from views.dashboard_view import DashboardView
+from controllers.table_controller import TableController
+from views.client_view import ClientDashboardView
+from controllers.client_controller import ClientLogicController
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, user_role, user_name):
+    def __init__(self, user_role, user_name, user_id=None):
         super().__init__()
         # Сохраняем данные пользователя
         self.user_role = user_role
         self.user_name = user_name
+        self.user_id = user_id
 
         self.setWindowTitle(f"Fintes — {self.user_name} ({self.user_role})")
         self.resize(1500, 800)
@@ -29,6 +33,9 @@ class MainWindow(QMainWindow):
         """
         Оставляет только те вкладки, которые разрешены данной роли.
         """
+        if self.user_role == "Клиент":
+            return
+
         permissions = {
             "Администратор": None,
             "Менеджер": ["👥 Клиенты", "💳 Типы абонементов", "📜 Активные абонементы", "🚪 Посещения", "💰 Платежи"],
@@ -47,9 +54,23 @@ class MainWindow(QMainWindow):
                     self.tabs.removeTab(i)
 
     def init_all_tabs(self):
+        if self.user_role == "Клиент":
+            client_controller = ClientLogicController()
+            self.client_dashboard = ClientDashboardView(client_controller, self.user_id)
+            self.tabs.addTab(self.client_dashboard, "🏠 Мой профиль и Записи")
+            self.tabs.currentChanged.connect(self.on_tab_changed)
+            return
+
+        controller = TableController()
+        controller.run_auto_tasks()
+
+        # --- ДОБАВЛЯЕМ ДАШБОРД ПЕРВЫМ ---
+        self.dashboard = DashboardView(controller)
+        self.tabs.addTab(self.dashboard, "📊 Дашборд")
+
         # Конфигурация остается как у тебя, только добавим заголовки в нужном порядке
         tables_config = {
-            "membership_types": [["ID", "Название", "Стоимость", "Срок", "Доступ"], "💳 Типы абонементов"],
+            "membership_types": [["ID", "Название абонемента", "Стоимость", "Срок", "Доступ"], "💳 Типы абонементов"],
             "clients": [
                 ["ID", "ФИО", "Телефон", "Доп. тел.", "Email", "Дата рожд.", "Адрес", "Регистрация", "Заметки", "Фото",
                  "Логин", "Пароль"], "👥 Клиенты"],
@@ -67,5 +88,24 @@ class MainWindow(QMainWindow):
         }
 
         for table_db_name, info in tables_config.items():
-            tab_widget = TableView(table_db_name, info[0], role=self.user_role)
+            tab_widget = TableView(table_db_name, info[0], role=self.user_role, user_name=self.user_name)
             self.tabs.addTab(tab_widget, info[1])
+
+        # НОВОЕ: Подключаем событие переключения вкладок
+        self.tabs.currentChanged.connect(self.on_tab_changed)
+
+    def on_tab_changed(self, index):
+        """Автоматически обновляет данные при переходе на вкладку"""
+        current_widget = self.tabs.widget(index)
+
+        # Если перешли в кабинет клиента — вызываем его метод загрузки данных
+        if isinstance(current_widget, ClientDashboardView):
+            current_widget.load_data()
+
+        # Если перешли на Дашборд — обновляем графики
+        if isinstance(current_widget, DashboardView):
+            current_widget.load_data()
+
+        # Если перешли на любую таблицу — обновляем SQL-данные (без показа всплывающего окна)
+        elif isinstance(current_widget, TableView):
+            current_widget.refresh_data(show_msg=False)
