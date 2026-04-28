@@ -1,14 +1,17 @@
 import sys
-from PyQt6.QtWidgets import QMainWindow, QTabWidget, QApplication, QDialog
+from PyQt6.QtWidgets import QMainWindow, QTabWidget, QApplication, QDialog, QPushButton
 from qt_material import apply_stylesheet
 from views.table_view import TableView
 from views.dashboard_view import DashboardView
 from controllers.table_controller import TableController
 from views.client_view import ClientDashboardView
 from controllers.client_controller import ClientLogicController
+from PyQt6.QtCore import pyqtSignal, Qt
 
 
 class MainWindow(QMainWindow):
+    logout_requested = pyqtSignal()
+
     def __init__(self, user_role, user_name, user_id=None):
         super().__init__()
         # Сохраняем данные пользователя
@@ -23,11 +26,43 @@ class MainWindow(QMainWindow):
         self.tabs.setMovable(True)
         self.setCentralWidget(self.tabs)
 
+        # --- Кнопка выхода ---
+        self.add_logout_button()
+
         # 1. Сначала инициализируем все возможные вкладки
         self.init_all_tabs()
 
         # 2. Затем скрываем лишние согласно роли
         self.apply_permissions()
+
+    def add_logout_button(self):
+        """Создает кнопку выхода в углу панели вкладок"""
+        logout_btn = QPushButton("ВЫЙТИ")
+        logout_btn.setFixedSize(90, 40)
+        logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Немного стилизуем, чтобы она выделялась (красная рамка или текст)
+        logout_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #e74c3c;
+                font-weight: bold;
+                padding: 5px 15px;
+                border: 1px solid #e74c3c;
+                border-radius: 6px;
+                margin: 5px;
+            }
+            QPushButton:hover {
+                background-color: #e74c3c;
+                color: white;
+            }
+        """)
+        logout_btn.clicked.connect(self.on_logout_clicked)
+        # Устанавливаем кнопку в правый верхний угол QTabWidget
+        self.tabs.setCornerWidget(logout_btn, Qt.Corner.TopRightCorner)
+
+    def on_logout_clicked(self):
+        """Метод вызывается при нажатии на кнопку"""
+        self.logout_requested.emit()  # Сообщаем контроллеру, что пользователь хочет выйти
 
     def apply_permissions(self):
         """

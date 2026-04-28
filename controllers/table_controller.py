@@ -57,6 +57,13 @@ class TableController:
                 if not re.match(r"^[0-9\+\-\(\)\s]+$", val_str):
                     return False, "Телефон содержит недопустимые буквы или символы!"
 
+            if col_name == "remaining_freeze_days":
+                try:
+                    if int(val_str) > 30:
+                        return False, "Максимальный срок заморозки - 30 дней"
+                except ValueError:
+                    return False, "Дни заморозки должны быть числом"
+
         if table_name == "client_subscriptions":
             start_idx = cols.index("start_date")
             end_idx = cols.index("end_date")
